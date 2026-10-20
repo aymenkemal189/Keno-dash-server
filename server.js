@@ -28,7 +28,7 @@ const KENO_SHARED_SECRET = process.env.KENO_SHARED_SECRET || 'FAST_KENO_DASH_SEC
 const BET_WINDOW = 60;   // 60s የውርርድ ጊዜ
 const DRAW_WINDOW = 20;  // 20s የ 20 ኳሶች እጣ ማውጣት ጊዜ
 const TOTAL_CYCLE = 80;  // 80s ዑደት
-const MIN_BET = 1;
+const MIN_BET = 2;
 const MAX_BET = 1000;
 const MAX_PAYOUT = 30000;
 
