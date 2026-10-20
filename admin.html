@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="am" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast Keno 🎱 Master Admin Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0b1013; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+        .glass { background: #131b20; border: 1px solid #1f2c34; }
+    </style>
+</head>
+<body class="p-4 md:p-6 select-none">
+    <div class="max-w-6xl mx-auto space-y-5">
+        <!-- Top Header -->
+        <header class="glass p-4 rounded-2xl flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl">🎱</span>
+                <div>
+                    <h1 class="text-lg font-black text-emerald-400">FAST KENO ADMIN CONTROLLER</h1>
+                    <p class="text-xs text-slate-400">24/7 Global Round & Database Manager</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="adminKeyInput" type="password" placeholder="Admin Secret Key..." class="text-xs p-2 rounded-xl bg-slate-900 border border-slate-700 text-white outline-none focus:border-emerald-400">
+                <button onclick="loadDashboard()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition">
+                    ግባ (Login)
+                </button>
+            </div>
+        </header>
+
+        <!-- Live Live Round Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="glass p-3 rounded-2xl text-center">
+                <p class="text-[10px] text-slate-400 uppercase font-bold">የአሁኑ ዙር (Round)</p>
+                <h3 id="curRoundId" class="text-xl font-black text-white mt-1">--</h3>
+                <span id="curPhase" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-400">Syncing...</span>
+            </div>
+            <div class="glass p-3 rounded-2xl text-center">
+                <p class="text-[10px] text-slate-400 uppercase font-bold">የተወራረደ ጠቅላላ ብር</p>
+                <h3 id="statTotalBets" class="text-xl font-black text-yellow-300 mt-1">0.00 ETB</h3>
+                <span class="text-[10px] text-slate-400">Total Volume</span>
+            </div>
+            <div class="glass p-3 rounded-2xl text-center">
+                <p class="text-[10px] text-slate-400 uppercase font-bold">የተከፈለ አሸናፊ ብር</p>
+                <h3 id="statTotalPayout" class="text-xl font-black text-red-400 mt-1">0.00 ETB</h3>
+                <span class="text-[10px] text-slate-400">Total Paid Out</span>
+            </div>
+            <div class="glass p-3 rounded-2xl text-center">
+                <p class="text-[10px] text-slate-400 uppercase font-bold">የቤት ትርፍ (GGR / House Profit)</p>
+                <h3 id="statGGR" class="text-xl font-black text-emerald-400 mt-1">0.00 ETB</h3>
+                <span id="statRTP" class="text-[10px] text-emerald-300 font-bold">RTP: 0%</span>
+            </div>
+        </div>
+
+        <!-- Current Live 20 Numbers Indicator -->
+        <div class="glass p-4 rounded-2xl space-y-2">
+            <div class="flex justify-between items-center text-xs">
+                <span class="font-bold text-slate-300"><i class="fa-solid fa-dice text-emerald-400 mr-1"></i> ለዚህ ዙር የወጡ 20 ቁጥሮች (Provably Fair)፦</span>
+                <span id="timerCountdown" class="font-mono font-bold text-yellow-300">00:00</span>
+            </div>
+            <div id="liveBallsGrid" class="flex flex-wrap gap-1.5 p-2 bg-slate-950 rounded-xl min-h-[46px] items-center">
+                <span class="text-slate-500 text-xs">በመጫን ላይ...</span>
+            </div>
+        </div>
+
+        <!-- Recent Bets Table -->
+        <div class="glass p-4 rounded-2xl space-y-3">
+            <div class="flex justify-between items-center">
+                <h3 class="text-xs font-black text-white uppercase"><i class="fa-solid fa-list-check text-blue-400 mr-1"></i> የቅርብ ጊዜ ውርርዶች (Live Bets)</h3>
+                <button onclick="loadDashboard()" class="text-xs text-emerald-400 font-bold hover:underline"><i class="fa-solid fa-rotate"></i> አድስ</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-[10px] uppercase text-slate-400 bg-slate-900 border-b border-slate-800">
+                        <tr>
+                            <th class="p-2">ID</th>
+                            <th class="p-2">ተጫዋች</th>
+                            <th class="p-2">ዙር</th>
+                            <th class="p-2">የመረጧቸው (Picks)</th>
+                            <th class="p-2">መጠን</th>
+                            <th class="p-2">Hits</th>
+                            <th class="p-2">ክፍያ</th>
+                            <th class="p-2">ሁኔታ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="betsTableBody" class="divide-y divide-slate-800 font-mono">
+                        <tr><td colspan="8" class="text-center p-3 text-slate-500">መረጃዎችን ለማየት Secret Key አስገብተው Login ይበሉ።</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function getKey() {
+            return document.getElementById('adminKeyInput').value.trim() || localStorage.getItem('keno_admin_key') || '';
+        }
+
+        async function loadDashboard() {
+            const key = getKey();
+            if (!key) return alert('እባክዎ Admin Secret Key ያስገቡ!');
+            localStorage.setItem('keno_admin_key', key);
+
+            try {
+                const res = await fetch('/api/admin/overview', {
+                    headers: { 'x-admin-key': key }
+                });
+                const d = await res.json();
+                if (!d.success) return alert(d.message || 'ስህተት ተፈጥሯል');
+
+                document.getElementById('curRoundId').innerText = d.currentRound.roundId;
+                document.getElementById('curPhase').innerText = d.currentRound.isDrawing ? '20-BALL DRAWING' : 'BETTING PHASE';
+                document.getElementById('curPhase').className = d.currentRound.isDrawing ? 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 animate-pulse' : 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/20 text-green-400';
+                
+                document.getElementById('timerCountdown').innerText = d.currentRound.timeFormatted;
+                document.getElementById('statTotalBets').innerText = Number(d.stats.totalBets).toFixed(2) + ' ETB';
+                document.getElementById('statTotalPayout').innerText = Number(d.stats.totalPayout).toFixed(2) + ' ETB';
+                document.getElementById('statGGR').innerText = Number(d.stats.ggr).toFixed(2) + ' ETB';
+                document.getElementById('statRTP').innerText = `RTP: ${d.stats.rtp}%`;
+
+                // Render 20 Balls
+                const ballsBox = document.getElementById('liveBallsGrid');
+                ballsBox.innerHTML = d.currentRound.drawnNumbers.map(n => `
+                    <span class="w-7 h-7 rounded-lg bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-black flex items-center justify-center text-xs shadow-sm">${n}</span>
+                `).join('');
+
+                // Render Bets Table
+                const tbody = document.getElementById('betsTableBody');
+                if (d.recentBets.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center p-3 text-slate-500">ምንም የተመዘገበ ውርርድ የለም</td></tr>';
+                } else {
+                    tbody.innerHTML = d.recentBets.map(b => `
+                        <tr class="hover:bg-slate-900/60 transition">
+                            <td class="p-2 text-slate-400">#${b.id}</td>
+                            <td class="p-2 text-white font-sans font-bold">${b.first_name || b.username || b.telegram_id}</td>
+                            <td class="p-2 text-blue-400 font-bold">${b.round_id}</td>
+                            <td class="p-2 text-slate-300">[${b.picks.join(', ')}]</td>
+                            <td class="p-2 font-bold text-yellow-400">${Number(b.bet_amount).toFixed(0)} ETB</td>
+                            <td class="p-2 font-bold">${b.hits} / ${b.picks.length}</td>
+                            <td class="p-2 font-black ${b.payout > 0 ? 'text-emerald-400' : 'text-slate-500'}">+${Number(b.payout).toFixed(0)} ETB</td>
+                            <td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'WON' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}">${b.status}</span></td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {
+                alert('የሰርቨር ግንኙነት ችግር አጋጥሟል!');
+            }
+        }
+
+        // ገጹ ሲከፈት የተቀመጠ ኪይ ካለ በየ 3 ሰከንዱ በራሱ ያድሳል
+        const saved = localStorage.getItem('keno_admin_key');
+        if (saved) {
+            document.getElementById('adminKeyInput').value = saved;
+            loadDashboard();
+            setInterval(loadDashboard, 3000);
+        }
+    </script>
+</body>
+</html>
