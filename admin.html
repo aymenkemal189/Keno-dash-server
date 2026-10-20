@@ -3,158 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Keno 🎱 Master Admin Controller</title>
+    <title>Fast Keno 🎱 Command Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
-        body { background-color: #0b1013; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
-        .glass { background: #131b20; border: 1px solid #1f2c34; }
+        body { background-color: #0c1115; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+        .glass-panel { background: #131b21; border: 1px solid #1f2d37; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #1e3a2f; border-radius: 4px; }
+        .ball-glow { box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
     </style>
 </head>
-<body class="p-4 md:p-6 select-none">
-    <div class="max-w-6xl mx-auto space-y-5">
-        <!-- Top Header -->
-        <header class="glass p-4 rounded-2xl flex flex-wrap justify-between items-center gap-3">
+<body class="p-3 md:p-6 custom-scroll select-none">
+    <div class="max-w-7xl mx-auto space-y-4">
+
+        <!-- 🌟 TOP MASTER HEADER -->
+        <header class="glass-panel p-4 rounded-3xl flex flex-wrap justify-between items-center gap-3 border-emerald-500/30">
             <div class="flex items-center gap-3">
-                <span class="text-3xl">🎱</span>
+                <div class="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/20">
+                    🎱
+                </div>
                 <div>
-                    <h1 class="text-lg font-black text-emerald-400">FAST KENO ADMIN CONTROLLER</h1>
-                    <p class="text-xs text-slate-400">24/7 Global Round & Database Manager</p>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base md:text-lg font-black text-white tracking-wide">FAST KENO COMMAND CENTER</h1>
+                        <span class="text-[9px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">v3.0 PRO</span>
+                    </div>
+                    <p class="text-xs text-slate-400">24/7 Global Round Orchestrator & Multi-DB Controller</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                <input id="adminKeyInput" type="password" placeholder="Admin Secret Key..." class="text-xs p-2 rounded-xl bg-slate-900 border border-slate-700 text-white outline-none focus:border-emerald-400">
-                <button onclick="loadDashboard()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition">
-                    ግባ (Login)
+
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <div class="relative flex-1 md:w-64">
+                    <input id="adminKeyInput" type="password" placeholder="Admin Secret Key ያስገቡ..." class="w-full text-xs p-2.5 pl-8 rounded-xl bg-slate-950 border border-slate-700 text-white outline-none focus:border-emerald-400 transition">
+                    <i class="fa-solid fa-lock text-slate-500 text-xs absolute left-2.5 top-3.5"></i>
+                </div>
+                <button onclick="manualRefresh()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-bolt"></i> ግባ / አድስ
                 </button>
             </div>
         </header>
 
-        <!-- Live Live Round Bar -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div class="glass p-3 rounded-2xl text-center">
-                <p class="text-[10px] text-slate-400 uppercase font-bold">የአሁኑ ዙር (Round)</p>
-                <h3 id="curRoundId" class="text-xl font-black text-white mt-1">--</h3>
-                <span id="curPhase" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-400">Syncing...</span>
+        <!-- 📊 4 FINANCIAL STAT CARDS -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="glass-panel p-4 rounded-3xl relative overflow-hidden border-blue-500/20">
+                <div class="flex justify-between items-start">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">የአሁኑ ዙር (Round)</p>
+                    <span id="curPhaseBadge" class="text-[9px] font-black px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Syncing...</span>
+                </div>
+                <h3 id="curRoundId" class="text-2xl font-black text-white mt-2 font-mono">--</h3>
+                <p class="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <i class="fa-regular fa-clock text-yellow-400"></i> የቀረ ጊዜ፡ <b id="timerDisplay" class="text-yellow-400 font-mono">00:00</b>
+                </p>
             </div>
-            <div class="glass p-3 rounded-2xl text-center">
-                <p class="text-[10px] text-slate-400 uppercase font-bold">የተወራረደ ጠቅላላ ብር</p>
-                <h3 id="statTotalBets" class="text-xl font-black text-yellow-300 mt-1">0.00 ETB</h3>
-                <span class="text-[10px] text-slate-400">Total Volume</span>
+
+            <div class="glass-panel p-4 rounded-3xl relative overflow-hidden border-yellow-500/20">
+                <div class="flex justify-between items-start">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">ጠቅላላ የተወራረደ (Turnover)</p>
+                    <i class="fa-solid fa-coins text-yellow-400 text-xs"></i>
+                </div>
+                <h3 id="statTotalBets" class="text-2xl font-black text-yellow-300 mt-2 font-mono">0 ETB</h3>
+                <p class="text-[10px] text-slate-400 mt-1">የተቆረጡ ቲኬቶች ድምር፡ <b id="statTotalTickets" class="text-white">0</b></p>
             </div>
-            <div class="glass p-3 rounded-2xl text-center">
-                <p class="text-[10px] text-slate-400 uppercase font-bold">የተከፈለ አሸናፊ ብር</p>
-                <h3 id="statTotalPayout" class="text-xl font-black text-red-400 mt-1">0.00 ETB</h3>
-                <span class="text-[10px] text-slate-400">Total Paid Out</span>
+
+            <div class="glass-panel p-4 rounded-3xl relative overflow-hidden border-red-500/20">
+                <div class="flex justify-between items-start">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">የተከፈለ ክፍያ (Payout)</p>
+                    <i class="fa-solid fa-hand-holding-dollar text-red-400 text-xs"></i>
+                </div>
+                <h3 id="statTotalPayout" class="text-2xl font-black text-red-400 mt-2 font-mono">0 ETB</h3>
+                <p class="text-[10px] text-slate-400 mt-1">RTP (ወደ ተጫዋች የተመለሰ): <b id="statRTP" class="text-slate-300">0%</b></p>
             </div>
-            <div class="glass p-3 rounded-2xl text-center">
-                <p class="text-[10px] text-slate-400 uppercase font-bold">የቤት ትርፍ (GGR / House Profit)</p>
-                <h3 id="statGGR" class="text-xl font-black text-emerald-400 mt-1">0.00 ETB</h3>
-                <span id="statRTP" class="text-[10px] text-emerald-300 font-bold">RTP: 0%</span>
+
+            <div class="glass-panel p-4 rounded-3xl relative overflow-hidden border-emerald-500/40">
+                <div class="flex justify-between items-start">
+                    <p class="text-[10px] font-black text-emerald-400 uppercase tracking-wider">የቤት ትርፍ (GGR Profit)</p>
+                    <i class="fa-solid fa-vault text-emerald-400 text-xs"></i>
+                </div>
+                <h3 id="statGGR" class="text-2xl font-black text-emerald-300 mt-2 font-mono">0 ETB</h3>
+                <p class="text-[10px] text-emerald-400/80 mt-1 font-bold">House Edge (የካሲኖ ትርፍ)</p>
             </div>
         </div>
 
-        <!-- Current Live 20 Numbers Indicator -->
-        <div class="glass p-4 rounded-2xl space-y-2">
+        <!-- 🎲 CURRENT DRAW 20 BALLS DISPLAY -->
+        <div class="glass-panel p-4 rounded-3xl space-y-2 border-emerald-500/30">
             <div class="flex justify-between items-center text-xs">
-                <span class="font-bold text-slate-300"><i class="fa-solid fa-dice text-emerald-400 mr-1"></i> ለዚህ ዙር የወጡ 20 ቁጥሮች (Provably Fair)፦</span>
-                <span id="timerCountdown" class="font-mono font-bold text-yellow-300">00:00</span>
+                <span class="font-black text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-nodes text-emerald-400"></i> ለዚህ ዙር የተመረጡ 20 ቁጥሮች (Provably Fair Draw)
+                </span>
+                <span class="text-[10px] font-bold text-slate-400">80-Second Deterministic Cycle</span>
             </div>
-            <div id="liveBallsGrid" class="flex flex-wrap gap-1.5 p-2 bg-slate-950 rounded-xl min-h-[46px] items-center">
-                <span class="text-slate-500 text-xs">በመጫን ላይ...</span>
+            <div id="liveBallsGrid" class="flex flex-wrap gap-2 p-3 bg-slate-950/80 rounded-2xl min-h-[50px] items-center border border-slate-800">
+                <span class="text-slate-500 text-xs">መረጃ በመጫን ላይ...</span>
             </div>
         </div>
 
-        <!-- Recent Bets Table -->
-        <div class="glass p-4 rounded-2xl space-y-3">
-            <div class="flex justify-between items-center">
-                <h3 class="text-xs font-black text-white uppercase"><i class="fa-solid fa-list-check text-blue-400 mr-1"></i> የቅርብ ጊዜ ውርርዶች (Live Bets)</h3>
-                <button onclick="loadDashboard()" class="text-xs text-emerald-400 font-bold hover:underline"><i class="fa-solid fa-rotate"></i> አድስ</button>
+        <!-- 🔍 SEARCH & FILTERS -->
+        <div class="glass-panel p-3 rounded-2xl flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <div class="relative flex-1 sm:w-72">
+                    <input id="searchInput" oninput="filterBetsTable()" type="text" placeholder="በተጠቃሚ ስም ወይም በቴሌግራም ID ፈልግ..." class="w-full text-xs p-2 pl-8 rounded-xl bg-slate-950 border border-slate-700 text-white outline-none focus:border-emerald-400">
+                    <i class="fa-solid fa-magnifying-glass text-slate-500 text-xs absolute left-2.5 top-2.5"></i>
+                </div>
+                <select id="statusFilter" onchange="filterBetsTable()" class="text-xs p-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-300 outline-none">
+                    <option value="ALL">ሁሉም ውርርዶች</option>
+                    <option value="WON">ያሸነፉ ብቻ (WON)</option>
+                    <option value="LOST">የተበሉ (LOST)</option>
+                </select>
             </div>
+            <div class="text-[11px] text-slate-400 flex items-center gap-2">
+                <span id="betsCountText">የቀረቡ ውርርዶች: 0</span>
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+        </div>
+
+        <!-- 📋 LIVE BETS MONITOR TABLE -->
+        <div class="glass-panel rounded-3xl overflow-hidden border border-slate-800">
             <div class="overflow-x-auto">
                 <table class="w-full text-xs text-left">
-                    <thead class="text-[10px] uppercase text-slate-400 bg-slate-900 border-b border-slate-800">
+                    <thead class="text-[10px] uppercase text-slate-400 bg-slate-950/80 border-b border-slate-800 font-bold">
                         <tr>
-                            <th class="p-2">ID</th>
-                            <th class="p-2">ተጫዋች</th>
-                            <th class="p-2">ዙር</th>
-                            <th class="p-2">የመረጧቸው (Picks)</th>
-                            <th class="p-2">መጠን</th>
-                            <th class="p-2">Hits</th>
-                            <th class="p-2">ክፍያ</th>
-                            <th class="p-2">ሁኔታ</th>
+                            <th class="p-3">Ticket ID</th>
+                            <th class="p-3">ተጫዋች</th>
+                            <th class="p-3">Telegram ID</th>
+                            <th class="p-3">ዙር #</th>
+                            <th class="p-3">የመረጧቸው ቁጥሮች (Picks)</th>
+                            <th class="p-3">ውርርድ (ETB)</th>
+                            <th class="p-3">Hits</th>
+                            <th class="p-3">ክፍያ (Payout)</th>
+                            <th class="p-3">ሁኔታ</th>
                         </tr>
                     </thead>
-                    <tbody id="betsTableBody" class="divide-y divide-slate-800 font-mono">
-                        <tr><td colspan="8" class="text-center p-3 text-slate-500">መረጃዎችን ለማየት Secret Key አስገብተው Login ይበሉ።</td></tr>
+                    <tbody id="betsTableBody" class="divide-y divide-slate-800/60 font-mono">
+                        <tr><td colspan="9" class="text-center p-6 text-slate-500">መረጃዎችን ለማየት ከላይ ባለው ሳጥን Admin Key አስገብተው Login ይበሉ።</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
+    <!-- ENGINE LOGIC -->
     <script>
+        let allBetsData = [];
+
         function getKey() {
             return document.getElementById('adminKeyInput').value.trim() || localStorage.getItem('keno_admin_key') || '';
         }
 
-        async function loadDashboard() {
+        async function manualRefresh() {
             const key = getKey();
             if (!key) return alert('እባክዎ Admin Secret Key ያስገቡ!');
             localStorage.setItem('keno_admin_key', key);
+            await fetchDashboardData();
+        }
+
+        async function fetchDashboardData() {
+            const key = getKey();
+            if (!key) return;
 
             try {
                 const res = await fetch('/api/admin/overview', {
                     headers: { 'x-admin-key': key }
                 });
                 const d = await res.json();
-                if (!d.success) return alert(d.message || 'ስህተት ተፈጥሯል');
+                if (!d.success) return;
 
+                // 1. Current Round Bar
                 document.getElementById('curRoundId').innerText = d.currentRound.roundId;
-                document.getElementById('curPhase').innerText = d.currentRound.isDrawing ? '20-BALL DRAWING' : 'BETTING PHASE';
-                document.getElementById('curPhase').className = d.currentRound.isDrawing ? 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 animate-pulse' : 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/20 text-green-400';
+                document.getElementById('timerDisplay').innerText = d.currentRound.timeFormatted;
                 
-                document.getElementById('timerCountdown').innerText = d.currentRound.timeFormatted;
-                document.getElementById('statTotalBets').innerText = Number(d.stats.totalBets).toFixed(2) + ' ETB';
-                document.getElementById('statTotalPayout').innerText = Number(d.stats.totalPayout).toFixed(2) + ' ETB';
-                document.getElementById('statGGR').innerText = Number(d.stats.ggr).toFixed(2) + ' ETB';
-                document.getElementById('statRTP').innerText = `RTP: ${d.stats.rtp}%`;
+                const phaseBadge = document.getElementById('curPhaseBadge');
+                if (d.currentRound.isDrawing) {
+                    phaseBadge.innerText = "DRAWING 20 BALLS";
+                    phaseBadge.className = "text-[9px] font-black px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse";
+                } else {
+                    phaseBadge.innerText = "BETTING STAGE";
+                    phaseBadge.className = "text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
+                }
 
-                // Render 20 Balls
+                // 2. Financial Stats
+                document.getElementById('statTotalBets').innerText = Number(d.stats.totalBets).toLocaleString() + ' ETB';
+                document.getElementById('statTotalPayout').innerText = Number(d.stats.totalPayout).toLocaleString() + ' ETB';
+                document.getElementById('statGGR').innerText = Number(d.stats.ggr).toLocaleString() + ' ETB';
+                document.getElementById('statRTP').innerText = d.stats.rtp + '%';
+                document.getElementById('statTotalTickets').innerText = d.stats.totalTickets;
+
+                // 3. Render 20 Balls
                 const ballsBox = document.getElementById('liveBallsGrid');
                 ballsBox.innerHTML = d.currentRound.drawnNumbers.map(n => `
-                    <span class="w-7 h-7 rounded-lg bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-black flex items-center justify-center text-xs shadow-sm">${n}</span>
+                    <div class="w-8 h-8 rounded-xl bg-emerald-950 border border-emerald-400/60 text-emerald-300 font-black flex items-center justify-center text-xs ball-glow transition">
+                        ${n}
+                    </div>
                 `).join('');
 
-                // Render Bets Table
-                const tbody = document.getElementById('betsTableBody');
-                if (d.recentBets.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="text-center p-3 text-slate-500">ምንም የተመዘገበ ውርርድ የለም</td></tr>';
-                } else {
-                    tbody.innerHTML = d.recentBets.map(b => `
-                        <tr class="hover:bg-slate-900/60 transition">
-                            <td class="p-2 text-slate-400">#${b.id}</td>
-                            <td class="p-2 text-white font-sans font-bold">${b.first_name || b.username || b.telegram_id}</td>
-                            <td class="p-2 text-blue-400 font-bold">${b.round_id}</td>
-                            <td class="p-2 text-slate-300">[${b.picks.join(', ')}]</td>
-                            <td class="p-2 font-bold text-yellow-400">${Number(b.bet_amount).toFixed(0)} ETB</td>
-                            <td class="p-2 font-bold">${b.hits} / ${b.picks.length}</td>
-                            <td class="p-2 font-black ${b.payout > 0 ? 'text-emerald-400' : 'text-slate-500'}">+${Number(b.payout).toFixed(0)} ETB</td>
-                            <td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'WON' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}">${b.status}</span></td>
-                        </tr>
-                    `).join('');
-                }
+                // 4. Bets Table
+                allBetsData = d.recentBets || [];
+                renderTable(allBetsData);
+
             } catch (e) {
-                alert('የሰርቨር ግንኙነት ችግር አጋጥሟል!');
+                console.error("Dashboard sync error:", e);
             }
         }
 
-        // ገጹ ሲከፈት የተቀመጠ ኪይ ካለ በየ 3 ሰከንዱ በራሱ ያድሳል
-        const saved = localStorage.getItem('keno_admin_key');
-        if (saved) {
-            document.getElementById('adminKeyInput').value = saved;
-            loadDashboard();
-            setInterval(loadDashboard, 3000);
+        function filterBetsTable() {
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            const status = document.getElementById('statusFilter').value;
+
+            const filtered = allBetsData.filter(b => {
+                const matchSearch = String(b.telegram_id).includes(query) || 
+                                    String(b.first_name || '').toLowerCase().includes(query) ||
+                                    String(b.username || '').toLowerCase().includes(query);
+                const matchStatus = (status === 'ALL') || (b.status === status);
+                return matchSearch && matchStatus;
+            });
+
+            renderTable(filtered);
+        }
+
+        function renderTable(bets) {
+            const tbody = document.getElementById('betsTableBody');
+            document.getElementById('betsCountText').innerText = `የቀረቡ ውርርዶች: ${bets.length}`;
+
+            if (bets.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center p-6 text-slate-500">ምንም የተመዘገበ ውርርድ አልተገኘም</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = bets.map(b => `
+                <tr class="hover:bg-slate-900/60 transition">
+                    <td class="p-3 text-slate-400">#${b.id}</td>
+                    <td class="p-3 font-sans font-bold text-white">${b.first_name || b.username || 'Player'}</td>
+                    <td class="p-3 text-slate-400 text-[11px]">${b.telegram_id}</td>
+                    <td class="p-3 text-blue-400 font-bold">${b.round_id}</td>
+                    <td class="p-3 text-emerald-400 font-bold">[${(b.picks || []).join(', ')}]</td>
+                    <td class="p-3 font-bold text-yellow-400">${Number(b.bet_amount).toFixed(2)}</td>
+                    <td class="p-3 font-black text-white">${b.hits} / ${(b.picks || []).length}</td>
+                    <td class="p-3 font-black ${b.payout > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+                        ${b.payout > 0 ? `+${Number(b.payout).toFixed(2)}` : '0.00'}
+                    </td>
+                    <td class="p-3">
+                        <span class="px-2.5 py-1 rounded-lg text-[10px] font-black ${b.status === 'WON' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}">
+                            ${b.status}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Auto Sync every 2.5 seconds
+        const savedKey = localStorage.getItem('keno_admin_key');
+        if (savedKey) {
+            document.getElementById('adminKeyInput').value = savedKey;
+            fetchDashboardData();
+            setInterval(fetchDashboardData, 2500);
         }
     </script>
 </body>
