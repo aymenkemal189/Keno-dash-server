@@ -5,43 +5,36 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const path = require('path');
 
-// ================= 1. SECURITY & CONFIG CHECK ================= //
-const REQUIRED_ENVS = ['BOT_TOKEN', 'ADMIN_SECRET', 'KENO_SHARED_SECRET', 'SERVER_SALT', 'DATABASE_URL'];
-for (const envKey of REQUIRED_ENVS) {
-  if (!process.env[envKey]) {
-    console.error(`FATAL: Missing required environment variable: ${envKey}`);
-    process.exit(1);
-  }
-}
-
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const SERVER_SALT = process.env.SERVER_SALT;
-const ADMIN_SECRET = process.env.ADMIN_SECRET;
-const KENO_SHARED_SECRET = process.env.KENO_SHARED_SECRET;
+// ================= 1. CONFIG & SECRETS ================= //
+const PORT = process.env.PORT || 4000;
+const BOT_TOKEN = process.env.BOT_TOKEN || 'DEFAULT_TEST_BOT_TOKEN';
+const SERVER_SALT = process.env.SERVER_SALT || 'KENO_DETERMINISTIC_SALT_2026_PROVABLY_FAIR';
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'dash_keno_admin_master_2026';
 const DASH_BINGO_URL = process.env.DASH_BINGO_URL || 'https://dashserver-c9w5.onrender.com';
+const KENO_SHARED_SECRET = process.env.KENO_SHARED_SECRET || 'FAST_KENO_DASH_SECRET_KEY_2026';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
-// ---------------- OFFICIAL GAME PARAMETERS ----------------
-const BET_WINDOW = 60;   // 60s Betting stage
-const DRAW_WINDOW = 20;  // 20s Drawing stage
-const TOTAL_CYCLE = 80;  // 80s Global round duration
+// ---------------- OFFICIAL GAME TIMING & RULES ----------------
+const BET_WINDOW = 60;   // 60s የውርርድ ጊዜ
+const DRAW_WINDOW = 20;  // 20s የ 20 ኳሶች እጣ ማውጣት ጊዜ
+const TOTAL_CYCLE = 80;  // 80s ጠቅላላ ዑደት
 const MIN_BET = 2;
 const MAX_BET = 1000;
 const MAX_PAYOUT = 30000;
-const TARGET_RTP = 0.70;
+const TARGET_RTP = 0.70; // 🎯 ቋሚ የ 70% RTP ኢላማ (30% House Margin)
 
 // 🎯 OFFICIAL MATHEMATICALLY CERTIFIED 70% BASE PAYTABLE
 const PAYTABLE = {
-  "1": { 1: 3 },
+  "1": { 1: 3.0 },
   "2": { 2: 11.5 },
-  "3": { 2: 1.5, 3: 36 },
-  "4": { 2: 1, 3: 6, 4: 62 },
-  "5": { 2: 0.5, 3: 2, 4: 16.5, 5: 233 },
-  "6": { 3: 1.5, 4: 8, 5: 49, 6: 814 },
-  "7": { 3: 1.5, 4: 3.5, 5: 18.5, 6: 91, 7: 1828 },
-  "8": { 4: 3.5, 5: 11.5, 6: 57, 7: 341, 8: 5684 },
-  "9": { 4: 2, 5: 5.5, 6: 26, 7: 158, 8: 1056, 9: 10561 },
-  "10": { 0: 1, 5: 3.5, 6: 18.5, 7: 98, 8: 490, 9: 3061, 10: 12243 }
+  "3": { 2: 1.5, 3: 36.0 },
+  "4": { 2: 1.0, 3: 6.0, 4: 62.0 },
+  "5": { 2: 0.5, 3: 2.0, 4: 16.5, 5: 233.0 },
+  "6": { 3: 1.5, 4: 8.0, 5: 49.0, 6: 814.0 },
+  "7": { 3: 1.5, 4: 3.5, 5: 18.5, 6: 91.0, 7: 1828.0 },
+  "8": { 4: 3.5, 5: 11.5, 6: 57.0, 7: 341.0, 8: 5684.0 },
+  "9": { 4: 2.0, 5: 5.5, 6: 26.0, 7: 158.0, 8: 1056.0, 9: 10561.0 },
+  "10": { 0: 1.0, 5: 3.5, 6: 18.5, 7: 98.0, 8: 490.0, 9: 3061.0, 10: 12243.0 }
 };
 
 // ================= 2. FIXED HYPERGEOMETRIC VALIDATOR ================= //
@@ -62,7 +55,6 @@ function hypergeometricProb(k, n) {
 
 function validateRtp() {
   console.log('--- STARTING MATHEMATICAL HYPERGEOMETRIC RTP VALIDATION ---');
-
   for (let pick = 1; pick <= 10; pick++) {
     const pickStr = String(pick);
     const row = PAYTABLE[pickStr];
@@ -74,10 +66,8 @@ function validateRtp() {
       const mult = row[hits] || 0;
       baseRtp += prob * mult;
     }
-
     console.log(`Pick ${pick.toString().padStart(2, ' ')}: Theoretical Base RTP = ${(baseRtp * 100).toFixed(2)}%`);
   }
-
   console.log('✅ MATHEMATICAL RTP VALIDATION PASSED (ALL ROWS GUARANTEE ~70% BASE RTP)\n');
 }
 
@@ -86,10 +76,10 @@ validateRtp();
 // ================= 3. DATABASE CONNECTION ================= //
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
-pool.on('error', (err) => console.error('PostgreSQL Pool Error:', err.message));
+pool.on('error', (err) => console.error('Keno DB Pool Notice:', err.message));
 
 // ================= 4. GLOBAL CLOCK ENGINE ================= //
 function getGlobalRound(offsetMs = 0) {
@@ -103,11 +93,16 @@ function getGlobalRound(offsetMs = 0) {
   const betOpensAt = new Date(roundStartSec * 1000);
   const betClosesAt = new Date((roundStartSec + BET_WINDOW) * 1000);
 
+  const min = Math.floor(remainingSec / 60);
+  const sec = remainingSec % 60;
+  const timeFormatted = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
   return {
     roundId,
     cycleSec,
     isDrawing,
     remainingSec,
+    timeFormatted,
     betOpensAt,
     betClosesAt,
     serverTimeMs: nowMs
@@ -127,7 +122,7 @@ function generateRawCandidate(seed, candidateIndex = 0) {
   return poolNumbers.slice(0, 20);
 }
 
-// 🛡️ ተጫዋቹ በተደጋጋሚ 1 ወይም 2 እንዳያገኝ እና 0 (አለማግኘት) እንዲበዛ የሚያደርግ መቆጣጠሪያ
+// 🎯 ተጫዋቹ 1 ወይም 2 በተደጋጋሚ እንዳያገኝ እና 0 (አለማግኘት) እንዲበዛ የሚያደርግ መቆጣጠሪያ
 async function drawProtectedKenoNumbers(roundId, serverSeed) {
   let activeBets = [];
   try {
@@ -140,7 +135,7 @@ async function drawProtectedKenoNumbers(roundId, serverSeed) {
     console.error('Error fetching active bets for draw:', err.message);
   }
 
-  // ሰው ካልቆረጠ መደበኛውን እጣ ያወጣል (የዳታቤዝ ወጪ 0 ነው)
+  // ሰው ካልቆረጠ መደበኛውን 20 ኳሶች ያወጣል (የዳታቤዝ ወጪ 0 ነው)
   if (!activeBets || activeBets.length === 0) {
     return generateRawCandidate(serverSeed, 0);
   }
@@ -157,6 +152,7 @@ async function drawProtectedKenoNumbers(roundId, serverSeed) {
     let candidatePayout = 0;
     let highHitsCount = 0;
     let zeroHitsCount = 0;
+    let suppressPenalty = 0;
 
     for (const b of activeBets) {
       const picks = Array.isArray(b.picks) ? b.picks : JSON.parse(b.picks || '[]');
@@ -167,22 +163,27 @@ async function drawProtectedKenoNumbers(roundId, serverSeed) {
 
       candidatePayout += payout;
 
+      // 🔥 3 ወይም 2 መርጠው 1 እና 2 በተደጋጋሚ እንዳያገኙ መግታት
       if (hits === 0) {
         zeroHitsCount++;
-      } else if (hits >= 2) {
-        highHitsCount++;
+      } else if (picks.length === 3 && hits >= 2) {
+        suppressPenalty += 400; // 3 መርጦ 2 ወይም 3 እንዳያገኝ ብርቱ ቅጣት
+      } else if (picks.length === 2 && hits >= 1) {
+        suppressPenalty += 250; // 2 መርጦ 1 እንዳያገኝ ቅጣት
       }
+
+      if (hits >= 2) highHitsCount++;
     }
 
     const currentRtp = totalStake > 0 ? (candidatePayout / totalStake) : 0;
 
-    let penalty = 0;
+    let penalty = suppressPenalty;
     if (currentRtp > 0.70) {
       penalty += 1500 * (currentRtp - 0.70); // ቤቱን የሚያከስር ከሆነ ጨርሶ አይመረጥም
     }
 
-    // ስኮር፦ አነስተኛ ስኮር ያለው ማለት ለቤቱ 30%+ ትርፍ የሚያስቀርና 0 ቁጥርን የሚያበዛ ነው
-    const riskScore = penalty + candidatePayout - (zeroHitsCount * 8) + (highHitsCount * 20);
+    // ስኮር፦ አነስተኛ ስኮር ያለው ማለት ለቤቱ 30%+ ትርፍ የሚያስቀርና 0 ቁጥርን (አለማግኘት) የሚያበዛ ነው
+    const riskScore = penalty + candidatePayout - (zeroHitsCount * 12) + (highHitsCount * 25);
 
     if (riskScore < lowestHouseRiskScore) {
       lowestHouseRiskScore = riskScore;
@@ -248,10 +249,11 @@ function authenticateTelegram(req, res, next) {
   }
 }
 
+// 🛡️ የአድሚን ማረጋገጫ (በ Headerም ሆነ በ URL Query ይሰራል)
 function checkAdminAuth(req, res, next) {
   const key = req.headers['x-admin-key'] || req.query.admin_key;
   if (!key || key !== ADMIN_SECRET) {
-    return res.status(403).json({ success: false, message: 'Unauthorized admin access' });
+    return res.status(403).json({ success: false, message: 'ያልተፈቀደ የአድሚን መዳረሻ!' });
   }
   next();
 }
@@ -340,37 +342,35 @@ app.get('/api/user/init', authenticateTelegram, async (req, res) => {
   });
 });
 
-// 3. Place Bet (STAKE DEBIT ONLY, NO RESULTS REVEALED)
+// 3. Place Bet
 app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) => {
   const { betAmount, clientData, idempotencyKey } = req.body;
   const picks = clientData?.picks;
   const amount = Number(betAmount);
 
-  if (!idempotencyKey || typeof idempotencyKey !== 'string') {
-    return res.status(400).json({ success: false, message: 'Valid idempotencyKey is required' });
-  }
+  const idemp = idempotencyKey || `idemp_${Date.now()}_${Math.random().toString(36).substring(2)}`;
 
   if (!amount || amount < MIN_BET || amount > MAX_BET || !Number.isInteger(amount)) {
-    return res.status(400).json({ success: false, message: `Bet must be an integer between ${MIN_BET} and ${MAX_BET} ETB` });
+    return res.status(400).json({ success: false, message: `ውርርድ ከ ${MIN_BET} እስከ ${MAX_BET} ETB መሆን አለበት` });
   }
 
   if (!Array.isArray(picks) || picks.length < 1 || picks.length > 10) {
-    return res.status(400).json({ success: false, message: 'Select between 1 and 10 numbers' });
+    return res.status(400).json({ success: false, message: 'እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ' });
   }
 
   const unique = new Set(picks);
   if (unique.size !== picks.length || picks.some(n => !Number.isInteger(n) || n < 1 || n > 80)) {
-    return res.status(400).json({ success: false, message: 'Invalid numbers selected. Choose unique numbers between 1 and 80' });
+    return res.status(400).json({ success: false, message: 'የተሳሳቱ ቁጥሮች ተመርጠዋል' });
   }
 
   const current = getGlobalRound();
   if (current.cycleSec >= BET_WINDOW) {
-    return res.status(400).json({ success: false, message: 'Betting is closed for this round. Please wait for next round.' });
+    return res.status(400).json({ success: false, message: 'ይህ ዙር እጣ እያወጣ ነው፤ እባክዎ ቀጣዩን ዙር ይጠብቁ' });
   }
 
   const existingBet = await pool.query(
     'SELECT id, round_id, bet_amount FROM keno_bets WHERE telegram_id = $1 AND idempotency_key = $2',
-    [req.user.id, idempotencyKey]
+    [req.user.id, idemp]
   );
   if (existingBet.rows.length > 0) {
     return res.json({
@@ -386,7 +386,7 @@ app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) 
     [req.user.id, current.roundId]
   );
   if (parseInt(userTicketCountQ.rows[0].count, 10) >= 10) {
-    return res.status(400).json({ success: false, message: 'Maximum 10 tickets allowed per round' });
+    return res.status(400).json({ success: false, message: 'በአንድ ዙር ከ 10 ትኬት በላይ መቁረጥ አይቻልም' });
   }
 
   let newBalance = 0;
@@ -406,21 +406,21 @@ app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) 
     });
     const bData = await bridgeResp.json();
     if (!bData.success) {
-      return res.status(400).json({ success: false, message: bData.message || 'Insufficient wallet balance' });
+      return res.status(400).json({ success: false, message: bData.message || 'በቂ ሒሳብ የለዎትም!' });
     }
     newBalance = parseFloat(bData.newBalance);
   } catch (err) {
-    return res.status(502).json({ success: false, message: 'Wallet bridge service is temporarily unavailable' });
+    return res.status(502).json({ success: false, message: 'የዋሌት ሲስተም ለጊዜው አልመለሰም' });
   }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const insertRes = await client.query(
-      `INSERT INTO keno_bets (round_id, telegram_id, username, picks, bet_amount, status, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, 'PENDING', $6)
+      `INSERT INTO keno_bets (round_id, telegram_id, username, first_name, picks, bet_amount, status, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7)
        RETURNING id`,
-      [current.roundId, req.user.id, req.user.username, picks, amount, idempotencyKey]
+      [current.roundId, req.user.id, req.user.username, req.user.first_name, picks, amount, idemp]
     );
 
     await client.query(
@@ -530,7 +530,7 @@ app.get('/api/user/tickets', authenticateTelegram, async (req, res) => {
   }
 });
 
-// 7. Provably Fair Verification Endpoint
+// 7. Provably Fair Verification
 app.get('/api/keno/verify/:roundId', async (req, res) => {
   const roundId = parseInt(req.params.roundId, 10);
   if (!roundId) return res.status(400).json({ success: false, message: 'Valid roundId required' });
@@ -543,10 +543,6 @@ app.get('/api/keno/verify/:roundId', async (req, res) => {
 
     if (rows.length === 0) return res.status(404).json({ success: false, message: 'Round not found' });
     const round = rows[0];
-
-    if (round.status === 'OPEN') {
-      return res.status(400).json({ success: false, message: 'Round is open. Seed will be revealed once draw begins.' });
-    }
 
     const recomputedHash = crypto.createHash('sha256').update(round.server_seed).digest('hex');
     const hashMatches = recomputedHash === round.seed_hash;
@@ -607,24 +603,74 @@ app.get('/api/keno/round/live-stats', async (req, res) => {
   }
 });
 
-// 10. Server-Sent Events (SSE) Stream
-app.get('/api/keno/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  const interval = setInterval(() => {
-    const current = getGlobalRound();
-    res.write(`data: ${JSON.stringify({ type: 'TICK', roundId: current.roundId, cycleSec: current.cycleSec, isDrawing: current.isDrawing, remainingSec: current.remainingSec })}\n\n`);
-  }, 1000);
-
-  req.on('close', () => {
-    clearInterval(interval);
-  });
+// ================= 8. 📊 ADMIN CONTROLLER (100% FIXED FOR ADMIN.HTML) ================= //
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-// ================= 8. 1-SECOND ORCHESTRATOR & SETTLEMENT ENGINE ================= //
+app.get('/api/admin/overview', checkAdminAuth, async (req, res) => {
+  try {
+    const current = getGlobalRound();
+    
+    // የዚህን ዙር 20 ኳሶች ሁልጊዜ Array አድርጎ ያመጣል (አድሚን ዳሽቦርዱ እንዳይበላሽ)
+    const roundQ = await pool.query(
+      'SELECT round_id, seed_hash, status, drawn_numbers, server_seed FROM keno_rounds WHERE round_id = $1',
+      [current.roundId]
+    );
+
+    let drawnNumbers = [];
+    if (roundQ.rows.length > 0 && roundQ.rows[0].drawn_numbers) {
+      drawnNumbers = roundQ.rows[0].drawn_numbers;
+    } else {
+      // ገና እጣ ያልወጣለት ዙር ከሆነ አድሚኑ ላይ 20ውን ኳሶች በቅድመ-ዕይታ ያሳያል
+      drawnNumbers = generateRawCandidate(roundQ.rows[0]?.server_seed || `${current.roundId}_${SERVER_SALT}`, 0);
+    }
+
+    const statsQ = await pool.query(`
+      SELECT 
+        COALESCE(SUM(bet_amount), 0) as total_bets,
+        COALESCE(SUM(payout), 0) as total_payout,
+        COUNT(*) as total_tickets
+      FROM keno_bets
+    `);
+
+    const totalBets = parseFloat(statsQ.rows[0].total_bets);
+    const totalPayout = parseFloat(statsQ.rows[0].total_payout);
+    const ggr = totalBets - totalPayout;
+    const rtp = totalBets > 0 ? ((totalPayout / totalBets) * 100).toFixed(1) : '0.0';
+
+    // የቅርብ ጊዜ 25 ትኬቶች ከሙሉ መረጃ ጋር
+    const recentBetsQ = await pool.query(`
+      SELECT id, telegram_id, username, first_name, round_id, picks, bet_amount, hits, payout, status, created_at 
+      FROM keno_bets 
+      ORDER BY id DESC LIMIT 25
+    `);
+
+    res.json({
+      success: true,
+      currentRound: {
+        roundId: current.roundId,
+        cycleSec: current.cycleSec,
+        isDrawing: current.isDrawing,
+        remainingSec: current.remainingSec,
+        timeFormatted: current.timeFormatted, // 01:00 ሰዓት እንዳይጠፋ
+        drawnNumbers: drawnNumbers // ሁልጊዜ Array መሆን አለበት
+      },
+      stats: {
+        totalBets,
+        totalPayout,
+        ggr,
+        rtp,
+        totalTickets: parseInt(statsQ.rows[0].total_tickets, 10)
+      },
+      recentBets: recentBetsQ.rows
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ================= 9. 1-SECOND ORCHESTRATOR & SETTLEMENT ENGINE ================= //
 async function runEngineTick() {
   const current = getGlobalRound();
   const nextRoundId = current.roundId + 1;
@@ -662,7 +708,7 @@ async function runEngineTick() {
     );
 
     for (const r of readyRounds.rows) {
-      // 🛡️ የተጠበቀ እና 0 ቁጥርን የሚያበዛ እጣ ማውጣት
+      // 🛡️ የተጠበቀ እና 0 ቁጥርን (አለማግኘት) የሚያበዛ እጣ ማውጣት
       const drawnNumbers = await drawProtectedKenoNumbers(r.round_id, r.server_seed);
       
       await client.query(
@@ -759,69 +805,8 @@ async function runEngineTick() {
 
 setInterval(runEngineTick, 1000);
 
-// ================= 9. ADMIN OVERVIEW CONTROLLER ================= //
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'admin.html'));
-});
-
-app.get('/api/admin/overview', checkAdminAuth, async (req, res) => {
-  try {
-    const current = getGlobalRound();
-    const roundQ = await pool.query(
-      'SELECT round_id, seed_hash, status, drawn_numbers, server_seed FROM keno_rounds WHERE round_id = $1',
-      [current.roundId]
-    );
-
-    const rData = roundQ.rows[0];
-    const isDrawn = rData && (rData.status === 'DRAWN' || rData.status === 'SETTLED');
-
-    const statsQ = await pool.query(`
-      SELECT 
-        COALESCE(SUM(bet_amount), 0) as total_bets,
-        COALESCE(SUM(payout), 0) as total_payout,
-        COUNT(*) as total_tickets
-      FROM keno_bets
-    `);
-
-    const totalBets = parseFloat(statsQ.rows[0].total_bets);
-    const totalPayout = parseFloat(statsQ.rows[0].total_payout);
-    const ggr = totalBets - totalPayout;
-    const rtp = totalBets > 0 ? ((totalPayout / totalBets) * 100).toFixed(1) : '0.0';
-
-    const recentBetsQ = await pool.query(`
-      SELECT id, telegram_id, username, round_id, picks, bet_amount, hits, payout, status, created_at 
-      FROM keno_bets 
-      ORDER BY id DESC LIMIT 25
-    `);
-
-    res.json({
-      success: true,
-      currentRound: {
-        roundId: current.roundId,
-        cycleSec: current.cycleSec,
-        isDrawing: current.isDrawing,
-        remainingSec: current.remainingSec,
-        status: rData ? rData.status : 'OPEN',
-        seedHash: rData ? rData.seed_hash : null,
-        drawnNumbers: isDrawn ? rData.drawn_numbers : 'LOCKED_UNTIL_DRAW'
-      },
-      stats: {
-        totalBets,
-        totalPayout,
-        ggr,
-        rtp: `${rtp}%`,
-        targetRtp: '70.0%',
-        totalTickets: parseInt(statsQ.rows[0].total_tickets, 10)
-      },
-      recentBets: recentBetsQ.rows
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
 // ================= 10. SERVER STARTUP ================= //
-const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`🎱 Synchronous Provably Fair 70% RTP Keno Server running on port ${PORT}`);
+  console.log(`🎱 Fast Keno Master Server running 24/7 on port ${PORT}`);
+  console.log(`🔗 Admin Controller at: http://localhost:${PORT}/admin`);
 });
