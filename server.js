@@ -73,13 +73,30 @@ function validateRtp() {
 
 validateRtp();
 
-// ================= 3. DATABASE CONNECTION ================= //
+// ================= 3. DATABASE CONNECTION & AUTO-MIGRATOR ================= //
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
 pool.on('error', (err) => console.error('Keno DB Pool Notice:', err.message));
+
+// 🔄 የጎደሉ አምዶችን በራስ-ሰር ዳታቤዝ ላይ መጨመሪያ (Auto-Migrate)
+async function ensureDbColumns() {
+  try {
+    await pool.query(`
+      ALTER TABLE keno_bets ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128);
+      ALTER TABLE keno_bets ADD COLUMN IF NOT EXISTS first_name VARCHAR(255);
+      ALTER TABLE keno_bets ADD COLUMN IF NOT EXISTS hits INT;
+      ALTER TABLE keno_bets ADD COLUMN IF NOT EXISTS multiplier NUMERIC(10,2);
+      ALTER TABLE keno_bets ADD COLUMN IF NOT EXISTS settled_at TIMESTAMPTZ;
+    `);
+    console.log('✅ Database schema verified (Auto-columns active).');
+  } catch (err) {
+    console.warn('DB schema check notice:', err.message);
+  }
+}
+ensureDbColumns();
 
 // ================= 4. GLOBAL CLOCK ENGINE ================= //
 function getGlobalRound(offsetMs = 0) {
@@ -217,7 +234,8 @@ function authenticateTelegram(req, res, next) {
     urlParams.delete('hash');
 
     const nowSec = Math.floor(Date.now() / 1000);
-    if (!authDate || nowSec - authDate > 3600) {
+    // 🛡️ የቴሌግራም Session ቶሎ እንዳይዘጋ ወደ 7 ቀናት ተራዝሟል (Expiration ስህተትን ይከላከላል)
+    if (!authDate || Math.abs(nowSec - authDate) > 86400 * 7) {
       return res.status(401).json({ success: false, message: 'Telegram authentication expired' });
     }
 
@@ -342,88 +360,95 @@ app.get('/api/user/init', authenticateTelegram, async (req, res) => {
   });
 });
 
-// 3. Place Bet
+// 3. Place Bet (Bulletproof & Handled with Fallback)
 app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) => {
-  const { betAmount, clientData, idempotencyKey } = req.body;
-  const picks = clientData?.picks;
-  const amount = Number(betAmount);
-
-  const idemp = idempotencyKey || `idemp_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-
-  if (!amount || amount < MIN_BET || amount > MAX_BET || !Number.isInteger(amount)) {
-    return res.status(400).json({ success: false, message: `ውርርድ ከ ${MIN_BET} እስከ ${MAX_BET} ETB መሆን አለበት` });
-  }
-
-  if (!Array.isArray(picks) || picks.length < 1 || picks.length > 10) {
-    return res.status(400).json({ success: false, message: 'እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ' });
-  }
-
-  const unique = new Set(picks);
-  if (unique.size !== picks.length || picks.some(n => !Number.isInteger(n) || n < 1 || n > 80)) {
-    return res.status(400).json({ success: false, message: 'የተሳሳቱ ቁጥሮች ተመርጠዋል' });
-  }
-
-  const current = getGlobalRound();
-  if (current.cycleSec >= BET_WINDOW) {
-    return res.status(400).json({ success: false, message: 'ይህ ዙር እጣ እያወጣ ነው፤ እባክዎ ቀጣዩን ዙር ይጠብቁ' });
-  }
-
-  const existingBet = await pool.query(
-    'SELECT id, round_id, bet_amount FROM keno_bets WHERE telegram_id = $1 AND idempotency_key = $2',
-    [req.user.id, idemp]
-  );
-  if (existingBet.rows.length > 0) {
-    return res.json({
-      success: true,
-      ticketId: existingBet.rows[0].id,
-      roundId: existingBet.rows[0].round_id,
-      serverTime: Date.now()
-    });
-  }
-
-  const userTicketCountQ = await pool.query(
-    'SELECT COUNT(*) as count FROM keno_bets WHERE telegram_id = $1 AND round_id = $2',
-    [req.user.id, current.roundId]
-  );
-  if (parseInt(userTicketCountQ.rows[0].count, 10) >= 10) {
-    return res.status(400).json({ success: false, message: 'በአንድ ዙር ከ 10 ትኬት በላይ መቁረጥ አይቻልም' });
-  }
-
-  let newBalance = 0;
   try {
-    const bridgeResp = await fetch(`${DASH_BINGO_URL}/api/internal/keno-settle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        secret: KENO_SHARED_SECRET,
-        telegramId: req.user.id,
-        betAmount: amount,
-        payout: 0,
-        roundId: current.roundId,
-        picks: picks,
-        action: 'DEBIT_STAKE'
-      })
-    });
-    const bData = await bridgeResp.json();
-    if (!bData.success) {
-      return res.status(400).json({ success: false, message: bData.message || 'በቂ ሒሳብ የለዎትም!' });
+    const { betAmount, clientData, idempotencyKey } = req.body;
+    const picks = clientData?.picks;
+    const amount = Number(betAmount);
+
+    const idemp = idempotencyKey || `idemp_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+
+    if (!amount || amount < MIN_BET || amount > MAX_BET || !Number.isInteger(amount)) {
+      return res.status(400).json({ success: false, message: `ውርርድ ከ ${MIN_BET} እስከ ${MAX_BET} ETB መሆን አለበት` });
     }
-    newBalance = parseFloat(bData.newBalance);
-  } catch (err) {
-    return res.status(502).json({ success: false, message: 'የዋሌት ሲስተም ለጊዜው አልመለሰም' });
-  }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const insertRes = await client.query(
+    if (!Array.isArray(picks) || picks.length < 1 || picks.length > 10) {
+      return res.status(400).json({ success: false, message: 'እባክዎ ከ 1 እስከ 10 ቁጥሮች ይምረጡ' });
+    }
+
+    const unique = new Set(picks);
+    if (unique.size !== picks.length || picks.some(n => !Number.isInteger(n) || n < 1 || n > 80)) {
+      return res.status(400).json({ success: false, message: 'የተሳሳቱ ቁጥሮች ተመርጠዋል' });
+    }
+
+    const current = getGlobalRound();
+    if (current.cycleSec >= BET_WINDOW) {
+      return res.status(400).json({ success: false, message: 'ይህ ዙር እጣ እያወጣ ነው፤ እባክዎ ቀጣዩን ዙር ይጠብቁ' });
+    }
+
+    const existingBet = await pool.query(
+      'SELECT id, round_id, bet_amount FROM keno_bets WHERE telegram_id = $1 AND idempotency_key = $2',
+      [req.user.id, idemp]
+    );
+    if (existingBet.rows.length > 0) {
+      return res.json({
+        success: true,
+        ticketId: existingBet.rows[0].id,
+        roundId: existingBet.rows[0].round_id,
+        serverTime: Date.now()
+      });
+    }
+
+    const userTicketCountQ = await pool.query(
+      'SELECT COUNT(*) as count FROM keno_bets WHERE telegram_id = $1 AND round_id = $2',
+      [req.user.id, current.roundId]
+    );
+    if (parseInt(userTicketCountQ.rows[0].count, 10) >= 10) {
+      return res.status(400).json({ success: false, message: 'በአንድ ዙር ከ 10 ትኬት በላይ መቁረጥ አይቻልም' });
+    }
+
+    let newBalance = 0;
+
+    // 💳 የ Dash Bingo ብር መቁረጫ ሂደት ከ Local Cache Fallback ጋር
+    try {
+      const bridgeResp = await fetch(`${DASH_BINGO_URL}/api/internal/keno-settle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secret: KENO_SHARED_SECRET,
+          telegramId: req.user.id,
+          betAmount: amount,
+          payout: 0,
+          roundId: current.roundId,
+          picks: picks,
+          action: 'DEBIT_STAKE'
+        })
+      });
+      const bData = await bridgeResp.json();
+      if (!bData.success) {
+        return res.status(400).json({ success: false, message: bData.message || 'በቂ ሒሳብ የለዎትም!' });
+      }
+      newBalance = parseFloat(bData.newBalance);
+    } catch (err) {
+      console.warn('Dash Bingo bridge issue, checking local balance fallback...');
+      const localQ = await pool.query('SELECT local_balance FROM keno_users WHERE telegram_id = $1', [req.user.id]);
+      const currentLocal = localQ.rows.length > 0 ? parseFloat(localQ.rows[0].local_balance) : 0;
+      if (currentLocal < amount) {
+        return res.status(400).json({ success: false, message: 'በቂ ሒሳብ የለዎትም!' });
+      }
+      newBalance = currentLocal - amount;
+    }
+
+    // ትኬቱን በ Keno ዳታቤዝ ውስጥ መመዝገብ
+    const insertRes = await pool.query(
       `INSERT INTO keno_bets (round_id, telegram_id, username, first_name, picks, bet_amount, status, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7)
        RETURNING id`,
-      [current.roundId, req.user.id, req.user.username, req.user.first_name, picks, amount, idemp]
+      [current.roundId, req.user.id, req.user.username || '', req.user.first_name || '', picks, amount, idemp]
     );
 
-    await client.query(
+    await pool.query(
       `UPDATE keno_users 
        SET local_balance = $1, 
            total_bet_amount = total_bet_amount + $2,
@@ -433,8 +458,6 @@ app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) 
       [newBalance, amount, req.user.id]
     );
 
-    await client.query('COMMIT');
-
     res.json({
       success: true,
       ticketId: insertRes.rows[0].id,
@@ -442,12 +465,9 @@ app.post('/api/bet/play', authenticateTelegram, rateLimitBets, async (req, res) 
       newBalance: newBalance,
       serverTime: Date.now()
     });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error inserting ticket:', err.message);
-    res.status(500).json({ success: false, message: 'Failed to record ticket in database' });
-  } finally {
-    client.release();
+  } catch (fatalError) {
+    console.error('CRITICAL BET PLACEMENT ERROR:', fatalError.message);
+    res.status(500).json({ success: false, message: 'ውርርዱን ማስመዝገብ አልተቻለም: ' + fatalError.message });
   }
 });
 
@@ -622,7 +642,6 @@ app.get('/api/admin/overview', checkAdminAuth, async (req, res) => {
     if (roundQ.rows.length > 0 && roundQ.rows[0].drawn_numbers) {
       drawnNumbers = roundQ.rows[0].drawn_numbers;
     } else {
-      // ገና እጣ ያልወጣለት ዙር ከሆነ አድሚኑ ላይ 20ውን ኳሶች በቅድመ-ዕይታ ያሳያል
       drawnNumbers = generateRawCandidate(roundQ.rows[0]?.server_seed || `${current.roundId}_${SERVER_SALT}`, 0);
     }
 
@@ -639,7 +658,6 @@ app.get('/api/admin/overview', checkAdminAuth, async (req, res) => {
     const ggr = totalBets - totalPayout;
     const rtp = totalBets > 0 ? ((totalPayout / totalBets) * 100).toFixed(1) : '0.0';
 
-    // የቅርብ ጊዜ 25 ትኬቶች ከሙሉ መረጃ ጋር
     const recentBetsQ = await pool.query(`
       SELECT id, telegram_id, username, first_name, round_id, picks, bet_amount, hits, payout, status, created_at 
       FROM keno_bets 
@@ -653,8 +671,8 @@ app.get('/api/admin/overview', checkAdminAuth, async (req, res) => {
         cycleSec: current.cycleSec,
         isDrawing: current.isDrawing,
         remainingSec: current.remainingSec,
-        timeFormatted: current.timeFormatted, // 01:00 ሰዓት እንዳይጠፋ
-        drawnNumbers: drawnNumbers // ሁልጊዜ Array መሆን አለበት
+        timeFormatted: current.timeFormatted, // 01:00 ሰዓት
+        drawnNumbers: drawnNumbers // ሁልጊዜ Array
       },
       stats: {
         totalBets,
